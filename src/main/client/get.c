@@ -129,6 +129,7 @@ bool bulk_get_callback(const as_batch_read * results, uint32_t n, void * udata) 
 		        record_to_pyobject(&err, &results[i].record, results[i].key, &py_rec);
 			if ( err.code == AEROSPIKE_OK ) {
                                 PyList_Append(py_recs, py_rec);
+                                Py_DECREF(py_rec);
                         }
                 }
         }
@@ -140,8 +141,6 @@ bool bulk_get_callback(const as_batch_read * results, uint32_t n, void * udata) 
 PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyObject * kwds)
 {
 	// Python Function Arguments
-        PyObject * py_ns = NULL;
-        PyObject * py_set = NULL;
 	PyObject * py_keys = NULL;
 	PyObject * py_policy = NULL;
         
@@ -157,11 +156,11 @@ PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyO
 	PyObject * py_rec = PyList_New(0);
 
 	// Python Function Keyword Arguments
-	static char * kwlist[] = {"policy", NULL};
+	static char * kwlist[] = {"namespace", "set", "keys", "policy", NULL};
 
 	// Python Function Argument Parsing
-	if ( PyArg_ParseTupleAndKeywords(args, kwds, "OOO|O:bulk_get", kwlist, 
-			&py_ns, &py_set, &py_keys, &py_policy) == false ) {
+	if ( PyArg_ParseTupleAndKeywords(args, kwds, "ssO|O:bulk_get", kwlist, 
+			&ns, &set, &py_keys, &py_policy) == false ) {
 		return NULL;
 	}
 
@@ -169,26 +168,6 @@ PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyO
 
 	// Initialize error
 	as_error_init(&err);
-
-	if ( ! PyString_Check(py_ns) ) {
-		as_error_update(&err, AEROSPIKE_ERR_PARAM, "namespace must be a string");
-                goto CLEANUP;
-	}
-	else {
-		ns = PyString_AsString(py_ns);
-	}
-
-        if ( PyString_Check(py_set) ) {
-                set = PyString_AsString(py_set);
-        }
-        else if ( PyUnicode_Check(py_set) ) {
-                PyObject * py_ustr = PyUnicode_AsUTF8String(py_set);
-                set = PyString_AsString(py_ustr);
-        }
-        else {
-                as_error_update(&err, AEROSPIKE_ERR_PARAM, "set must be a string");
-                goto CLEANUP;
-        }
 
 	// Convert python policy object to as_policy_exists
 	pyobject_to_policy_read(&err, py_policy, &policy, &policy_p);
@@ -199,6 +178,8 @@ PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyO
         for ( int i = 0; i < PySequence_Length(py_keys); i++ ) {
                 PyObject* py_key = PySequence_GetItem(py_keys, i);
                 as_key* key = as_batch_keyat(&batch, i);
+                bool fail = false;
+                
 		if ( PyString_Check(py_key) ) {
 			char * k = PyString_AsString(py_key);
 			as_key_init_strp(key, ns, set, k, true);
@@ -215,23 +196,28 @@ PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyO
 			PyObject * py_ustr = PyUnicode_AsUTF8String(py_key);
 			char * k = PyString_AsString(py_ustr);
 			as_key_init_strp(key, ns, set, k, true);
+                        Py_DECREF(py_ustr);
 		}
 		else if ( PyByteArray_Check(py_key) ) {
 			as_error_update(&err, AEROSPIKE_ERR_PARAM, "key as a byte array is not supported");
-                        goto CLEANUP;
+                        fail = true;
 		}
 		else {
 			as_error_update(&err, AEROSPIKE_ERR_PARAM, "key is invalid");
-                        goto CLEANUP;
+                        fail = true;
 		}
+
+                Py_DECREF(py_key);
+
+                if ( fail ) {
+                        goto CLEANUP;
+                }
         }
 
 	// Invoke operation
 	aerospike_batch_get(self->as, &err, &policy, &batch, bulk_get_callback, py_rec);
 
 CLEANUP:
-	
-        as_batch_destroy(&batch);
 	
 	if ( err.code != AEROSPIKE_OK ) {
 		PyObject * py_err = NULL;
