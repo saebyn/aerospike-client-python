@@ -41,6 +41,7 @@ static PyMethodDef AerospikeKey_Type_Methods[] = {
 
     {"get",		(PyCFunction) AerospikeKey_Get,		METH_VARARGS | METH_KEYWORDS, 
     			"Get all bins of the record."},
+
     
     {"put",		(PyCFunction) AerospikeKey_Put,		METH_VARARGS | METH_KEYWORDS,
     			"Update a record."},

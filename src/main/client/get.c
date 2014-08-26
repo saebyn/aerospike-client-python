@@ -21,6 +21,7 @@
 #include <aerospike/as_key.h>
 #include <aerospike/as_error.h>
 #include <aerospike/as_record.h>
+#include <aerospike/aerospike_batch.h>
 
 #include "client.h"
 #include "conversions.h"
@@ -97,6 +98,7 @@ CLEANUP:
 	return py_rec;
 }
 
+
 PyObject * AerospikeClient_Get(AerospikeClient * self, PyObject * args, PyObject * kwds)
 {
 	// Python Function Arguments
@@ -114,4 +116,129 @@ PyObject * AerospikeClient_Get(AerospikeClient * self, PyObject * args, PyObject
 
 	// Invoke Operation
 	return AerospikeClient_Get_Invoke(self, py_key, py_policy);
+}
+
+
+bool bulk_get_callback(const as_batch_read * results, uint32_t n, void * udata) {
+        PyObject *py_recs = (PyObject*)udata;
+        PyObject *py_rec = NULL;
+	as_error err;
+
+        for (uint32_t i = 0; i < n; i++) {
+                if (results[i].result == AEROSPIKE_OK) {
+		        record_to_pyobject(&err, &results[i].record, results[i].key, &py_rec);
+			if ( err.code == AEROSPIKE_OK ) {
+                                PyList_Append(py_recs, py_rec);
+                        }
+                }
+        }
+
+        return true;
+}
+
+
+PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyObject * kwds)
+{
+	// Python Function Arguments
+        PyObject * py_ns = NULL;
+        PyObject * py_set = NULL;
+	PyObject * py_keys = NULL;
+	PyObject * py_policy = NULL;
+        
+	// Aerospike Client Arguments
+	as_error err;
+	as_policy_read policy;
+	as_policy_read * policy_p = NULL;
+        as_batch batch;
+        char * ns = NULL;
+        char * set = NULL;
+
+	// Python Return Value
+	PyObject * py_rec = PyList_New(0);
+
+	// Python Function Keyword Arguments
+	static char * kwlist[] = {"policy", NULL};
+
+	// Python Function Argument Parsing
+	if ( PyArg_ParseTupleAndKeywords(args, kwds, "OOO|O:bulk_get", kwlist, 
+			&py_ns, &py_set, &py_keys, &py_policy) == false ) {
+		return NULL;
+	}
+
+        as_batch_inita(&batch, PySequence_Length(py_keys));
+
+	// Initialize error
+	as_error_init(&err);
+
+	if ( ! PyString_Check(py_ns) ) {
+		as_error_update(&err, AEROSPIKE_ERR_PARAM, "namespace must be a string");
+                goto CLEANUP;
+	}
+	else {
+		ns = PyString_AsString(py_ns);
+	}
+
+        if ( PyString_Check(py_set) ) {
+                set = PyString_AsString(py_set);
+        }
+        else if ( PyUnicode_Check(py_set) ) {
+                PyObject * py_ustr = PyUnicode_AsUTF8String(py_set);
+                set = PyString_AsString(py_ustr);
+        }
+        else {
+                as_error_update(&err, AEROSPIKE_ERR_PARAM, "set must be a string");
+                goto CLEANUP;
+        }
+
+	// Convert python policy object to as_policy_exists
+	pyobject_to_policy_read(&err, py_policy, &policy, &policy_p);
+	if ( err.code != AEROSPIKE_OK ) {
+		goto CLEANUP;
+	}
+
+        for ( int i = 0; i < PySequence_Length(py_keys); i++ ) {
+                PyObject* py_key = PySequence_GetItem(py_keys, i);
+                as_key* key = as_batch_keyat(&batch, i);
+		if ( PyString_Check(py_key) ) {
+			char * k = PyString_AsString(py_key);
+			as_key_init_strp(key, ns, set, k, true);
+		}
+		else if ( PyInt_Check(py_key) ) {
+			int64_t k = (int64_t) PyInt_AsLong(py_key);
+			as_key_init_int64(key, ns, set, k);
+		}
+		else if ( PyLong_Check(py_key) ) {
+			int64_t k = (int64_t) PyLong_AsLongLong(py_key);
+			as_key_init_int64(key, ns, set, k);
+		}
+		else if ( PyUnicode_Check(py_key) ) {
+			PyObject * py_ustr = PyUnicode_AsUTF8String(py_key);
+			char * k = PyString_AsString(py_ustr);
+			as_key_init_strp(key, ns, set, k, true);
+		}
+		else if ( PyByteArray_Check(py_key) ) {
+			as_error_update(&err, AEROSPIKE_ERR_PARAM, "key as a byte array is not supported");
+                        goto CLEANUP;
+		}
+		else {
+			as_error_update(&err, AEROSPIKE_ERR_PARAM, "key is invalid");
+                        goto CLEANUP;
+		}
+        }
+
+	// Invoke operation
+	aerospike_batch_get(self->as, &err, &policy, &batch, bulk_get_callback, py_rec);
+
+CLEANUP:
+	
+        as_batch_destroy(&batch);
+	
+	if ( err.code != AEROSPIKE_OK ) {
+		PyObject * py_err = NULL;
+		error_to_pyobject(&err, &py_err);
+		PyErr_SetObject(PyExc_Exception, py_err);
+		return NULL;
+	}
+	
+	return py_rec;
 }

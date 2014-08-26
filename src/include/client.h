@@ -78,6 +78,14 @@ PyObject * AerospikeClient_Exists(AerospikeClient * self, PyObject * args, PyObj
 PyObject * AerospikeClient_Get(AerospikeClient * self, PyObject * args, PyObject * kwds);
 
 /**
+ * Reads records from the database.
+ *
+ *		client.bulk_get((x,y), z1, z2, z3)
+ *
+ */
+PyObject * AerospikeClient_Bulk_Get(AerospikeClient * self, PyObject * args, PyObject * kwds);
+
+/**
  * Write a record in the database.
  *
  *		client.put((x,y,z), ...)
