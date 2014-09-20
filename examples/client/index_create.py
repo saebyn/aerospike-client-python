@@ -26,7 +26,7 @@ from optparse import OptionParser
 # Options Parsing
 ################################################################################
 
-usage = "usage: %prog [options] module"
+usage = "usage: %prog [options] bin index_name"
 
 optparser = OptionParser(usage=usage, add_help_option=False)
 
@@ -50,6 +50,19 @@ optparser.add_option(
     "-p", "--port", dest="port", type="int", default=3000, metavar="<PORT>",
     help="Port of the Aerospike server.")
 
+optparser.add_option(
+    "-n", "--namespace", dest="namespace", type="string", default="test", metavar="<NS>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "-s", "--set", dest="set", type="string", default="demo", metavar="<SET>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "-t", "--type", dest="type", type="string", default="string", metavar="<INDEX_TYPE>",
+    help="The type of index to create")
+
+
 (options, args) = optparser.parse_args()
 
 if options.help:
@@ -57,7 +70,7 @@ if options.help:
     print()
     sys.exit(1)
 
-if len(args) != 1:
+if len(args) != 2:
     optparser.print_help()
     print()
     sys.exit(1)
@@ -89,12 +102,20 @@ try:
     # ----------------------------------------------------------------------------
      
     try:
-
+        args.reverse()
         policy = {}
-        module = args.pop()
-        
-        client.udf_remove(policy, module)
-        print("OK, 1 UDF de-registered")
+        namespace = options.namespace
+        set = options.set
+        type = options.type
+        bin = args.pop()
+        index_name = args.pop()
+
+        if type == 'string':
+            client.index_string_create(policy, namespace, set, bin, index_name)
+            print("OK, 1 Secondary Index Created ")
+        elif type == 'integer':
+            client.index_integer_create(policy, namespace, set, bin, index_name)
+            print("OK, 1 Secondary Index Created ")
 
     except Exception as e:
         print("error: {0}".format(e), file=sys.stderr)

@@ -18,21 +18,35 @@
 from __future__ import print_function
 
 import aerospike
+import random
+import signal
 import sys
+import string
+import time
 
+from guppy import hpy
+from threading import Timer
 from optparse import OptionParser
 
 ################################################################################
 # Options Parsing
 ################################################################################
 
-usage = "usage: %prog [options] key"
+usage = "usage: %prog [options]"
 
 optparser = OptionParser(usage=usage, add_help_option=False)
 
 optparser.add_option(
     "--help", dest="help", action="store_true",
     help="Displays this message.")
+
+optparser.add_option(
+    "-U", "--username", dest="username", type="string", metavar="<USERNAME>",
+    help="Username to connect to database.")
+
+optparser.add_option(
+    "-P", "--password", dest="password", type="string", metavar="<PASSWORD>",
+    help="Password to connect to database.")
 
 optparser.add_option(
     "-h", "--host", dest="host", type="string", default="127.0.0.1", metavar="<ADDRESS>",
@@ -43,21 +57,21 @@ optparser.add_option(
     help="Port of the Aerospike server.")
 
 optparser.add_option(
-    "-U", "--username", dest="username", type="string", metavar="<USERNAME>",
-    help="Username to connect to database.")
+    "-n", "--namespace", dest="namespace", type="string", default="test", metavar="<NS>",
+    help="Port of the Aerospike server.")
 
 optparser.add_option(
-    "-P", "--password", dest="password", type="string", metavar="<PASSWORD>",
-    help="Password to connect to database.")
+    "-s", "--set", dest="set", type="string", default="demo", metavar="<SET>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "-v", "--verbose", dest="verbose", action="store_true", metavar="<PORT>",
+    help="Verbose output.")
+
 
 (options, args) = optparser.parse_args()
 
 if options.help:
-    optparser.print_help()
-    print()
-    sys.exit(1)
-
-if options.username == None or options.password == None:
     optparser.print_help()
     print()
     sys.exit(1)
@@ -76,8 +90,29 @@ config = {
 
 exitCode = 0
 
-try:
+count = 0
+start = 0
 
+def total_summary():
+
+    # stop time
+    stop = time.time()
+
+    # elapse time
+    elapse = (stop - start)
+
+    print()
+    print("Summary:")
+    print("     {0} keys generated".format(count))
+    print("     {0} seconds for {1} operations".format(elapse, count))
+    print("     {0} operations per second".format(count / elapse))
+    print()
+    # print("Heap: ")
+    # print(heapy.heap())
+
+    sys.exit(0)
+
+try:
     # ----------------------------------------------------------------------------
     # Connect to Cluster
     # ----------------------------------------------------------------------------
@@ -87,32 +122,35 @@ try:
     # ----------------------------------------------------------------------------
     # Perform Operation
     # ----------------------------------------------------------------------------
-     
+
     try:
 
-   	policy = {}
-	filename = "./examples/client/simple_udf.lua"
-	udf_type = 0 # 0 for LUA 
-    	
-  	client.udf_put(policy, filename, udf_type)
-        print("OK, 1 new UDF registered")
+        signal.signal(signal.SIGTERM, total_summary)
 
-    except Exception as e:
-        print("error: {0}".format(e), file=sys.stderr)
-        exitCode = 2
-    
-    # ----------------------------------------------------------------------------
-    # Close Connection to Cluster
-    # ----------------------------------------------------------------------------
+        print()
+        print("Press CTRL+C to quit.")
+        print()
 
-    client.close()
+        start = time.time()
+
+        # run the operatons
+        while True:
+            count += 1
+            keyt = (options.namespace, options.set, count)
+            client.put(keyt, {'key': count})
+
+    except KeyboardInterrupt:
+        total_summary()
+    except Exception, eargs:
+        print("error: {0}".format(eargs), file=sys.stderr)
+        sys.exit(2)
 
 except Exception, eargs:
     print("error: {0}".format(eargs), file=sys.stderr)
-    exitCode = 3
+    sys.exit(3)
 
 ################################################################################
 # Exit
 ################################################################################
 
-sys.exit(exitCode)
+sys.exit(0)

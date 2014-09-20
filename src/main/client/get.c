@@ -61,7 +61,7 @@ PyObject * AerospikeClient_Get_Invoke(
 	as_record_init(rec, 0);
 
 	// Invoke operation
-	aerospike_key_get(self->as, &err, NULL, &key, &rec);
+	aerospike_key_get(self->as, &err, policy_p, &key, &rec);
 
 	if ( err.code == AEROSPIKE_OK ) {
 		record_to_pyobject(&err, rec, &key, &py_rec);
@@ -86,6 +86,7 @@ PyObject * AerospikeClient_Get_Invoke(
 
 CLEANUP:
 	
+	// as_key_destroy(&key);
 	as_record_destroy(rec);
 	
 	if ( err.code != AEROSPIKE_OK ) {

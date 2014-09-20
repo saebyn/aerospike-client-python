@@ -18,15 +18,16 @@
 from __future__ import print_function
 
 import aerospike
+import json
 import sys
 
 from optparse import OptionParser
 
 ################################################################################
-# Options Parsing
+# Option Parsing
 ################################################################################
 
-usage = "usage: %prog [options] module"
+usage = "usage: %prog [options] key module function [args...]"
 
 optparser = OptionParser(usage=usage, add_help_option=False)
 
@@ -50,6 +51,23 @@ optparser.add_option(
     "-p", "--port", dest="port", type="int", default=3000, metavar="<PORT>",
     help="Port of the Aerospike server.")
 
+optparser.add_option(
+    "-n", "--namespace", dest="namespace", type="string", default="test", metavar="<NS>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "-s", "--set", dest="set", type="string", default="demo", metavar="<SET>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "--gen", dest="gen", type="int", default=None, metavar="<GEN>",
+    help="Generation of the record being written.")
+
+optparser.add_option(
+    "--ttl", dest="ttl", type="int", default=None, metavar="<TTL>",
+    help="TTL of the record being written.")
+
+
 (options, args) = optparser.parse_args()
 
 if options.help:
@@ -57,7 +75,7 @@ if options.help:
     print()
     sys.exit(1)
 
-if len(args) != 1:
+if len(args) < 3:
     optparser.print_help()
     print()
     sys.exit(1)
@@ -76,6 +94,12 @@ config = {
 
 exitCode = 0
 
+def parse_arg(s):
+    try:
+        return json.loads(s)
+    except ValueError:
+        return s
+
 try:
 
     # ----------------------------------------------------------------------------
@@ -87,19 +111,30 @@ try:
     # ----------------------------------------------------------------------------
     # Perform Operation
     # ----------------------------------------------------------------------------
-     
+
     try:
 
-        policy = {}
-        module = args.pop()
+        namespace = options.namespace if options.namespace and options.namespace != 'None' else None
+        set = options.set if options.set and options.set != 'None' else None
         
-        client.udf_remove(policy, module)
-        print("OK, 1 UDF de-registered")
+        args.reverse()
+        key = args.pop()
+        module = args.pop()
+        function = args.pop()
+
+        # invoke operation
+        args.reverse()
+        argl = map(parse_arg, args)
+        res = client.apply((namespace, set, key), module, function, argl)
+            
+        print(res)
+        print("---")
+        print("OK, 1 UDF applied.")
 
     except Exception as e:
         print("error: {0}".format(e), file=sys.stderr)
         exitCode = 2
-    
+
     # ----------------------------------------------------------------------------
     # Close Connection to Cluster
     # ----------------------------------------------------------------------------

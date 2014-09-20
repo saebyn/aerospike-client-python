@@ -26,13 +26,21 @@ from optparse import OptionParser
 # Options Parsing
 ################################################################################
 
-usage = "usage: %prog [options] key"
+usage = "usage: %prog [options] key bin [bin ...]"
 
 optparser = OptionParser(usage=usage, add_help_option=False)
 
 optparser.add_option(
     "--help", dest="help", action="store_true",
     help="Displays this message.")
+
+optparser.add_option(
+    "-U", "--username", dest="username", type="string", metavar="<USERNAME>",
+    help="Username to connect to database.")
+
+optparser.add_option(
+    "-P", "--password", dest="password", type="string", metavar="<PASSWORD>",
+    help="Password to connect to database.")
 
 optparser.add_option(
     "-h", "--host", dest="host", type="string", default="127.0.0.1", metavar="<ADDRESS>",
@@ -43,12 +51,20 @@ optparser.add_option(
     help="Port of the Aerospike server.")
 
 optparser.add_option(
-    "-U", "--username", dest="username", type="string", metavar="<USERNAME>",
-    help="Username to connect to database.")
+    "-n", "--namespace", dest="namespace", type="string", default="test", metavar="<NS>",
+    help="Port of the Aerospike server.")
 
 optparser.add_option(
-    "-P", "--password", dest="password", type="string", metavar="<PASSWORD>",
-    help="Password to connect to database.")
+    "-s", "--set", dest="set", type="string", default="demo", metavar="<SET>",
+    help="Port of the Aerospike server.")
+
+optparser.add_option(
+    "--no-key", dest="nokey", action="store_true",
+    help="Do not return the key")
+
+optparser.add_option(
+    "--no-metadata", dest="nometadata", action="store_true",
+    help="Do not return the metadata")
 
 (options, args) = optparser.parse_args()
 
@@ -57,7 +73,7 @@ if options.help:
     print()
     sys.exit(1)
 
-if options.username == None or options.password == None:
+if len(args) < 1:
     optparser.print_help()
     print()
     sys.exit(1)
@@ -87,33 +103,44 @@ try:
     # ----------------------------------------------------------------------------
     # Perform Operation
     # ----------------------------------------------------------------------------
-     
-    try:
 
-   	policy = {}
-	namespace = "test"
-	set = "demo"
-	bin = "bina"
-	index_name = "foo_int"
-    	
- 	client.index_integer_create(policy, namespace, set, bin, index_name)
-        print("OK, 1 Integer Secondary Index Created ")
- 
-	client.index_remove(policy, namespace, index_name)
-	print("OK, 1 Integer Secondary Index Removed ")
+    try:
+        namespace = options.namespace if options.namespace and options.namespace != 'None' else None
+        set = options.set if options.set and options.set != 'None' else None
+        key = args.pop(0)
+        policy = None
+
+        print(args)
+
+        (key, metadata, record)= client.select((namespace, set, key), args, policy)
+
+        if metadata != None:
+            if options.nometadata and options.nokey:
+                print(record)
+            elif options.nometadata:
+                print(key, record)
+            elif options.nokey:
+                print(metadata, record)
+            else:
+                print(key, metadata, record)
+            print("---")
+            print("OK, 1 record found.")
+        else:
+            print('error: Not Found.', file=sys.stderr)
+            exitCode = 1
 
     except Exception as e:
         print("error: {0}".format(e), file=sys.stderr)
         exitCode = 2
-    
+
     # ----------------------------------------------------------------------------
     # Close Connection to Cluster
     # ----------------------------------------------------------------------------
 
     client.close()
 
-except Exception, eargs:
-    print("error: {0}".format(eargs), file=sys.stderr)
+except Exception as e:
+    print("error: {0}".format(e), file=sys.stderr)
     exitCode = 3
 
 ################################################################################
