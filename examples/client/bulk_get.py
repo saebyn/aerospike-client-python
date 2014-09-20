@@ -44,11 +44,11 @@ optparser.add_option(
 
 optparser.add_option(
     "-n", "--namespace", dest="namespace", type="string", default="test", metavar="<NS>",
-    help="Port of the Aerospike server.")
+    help="Namespace to retrieve the keys from.")
 
 optparser.add_option(
     "-s", "--set", dest="set", type="string", default="demo", metavar="<SET>",
-    help="Port of the Aerospike server.")
+    help="Set to retrieve the keys from.")
 
 (options, args) = optparser.parse_args()
 
